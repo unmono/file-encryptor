@@ -1,0 +1,53 @@
+.root {
+  width: 100%;
+  font-family: 'sans-serif';
+  font-size: 14px;
+}
+
+.root input {
+  font-family: 'sans-serif';
+}
+
+.root button {
+  font-family: 'sans-serif';
+}
+
+.dropZone {
+  width: 700px;
+
+  margin: auto;
+  padding: 20px;
+
+  border: 1px solid slategray;
+  border-radius: 4px;
+}
+
+.w-30 {
+  width: 30%;
+}
+
+.m-auto {
+  margin: auto;
+}
+
+.fx-c {
+  display: flex;
+  flex-direction: column;
+}
+
+.fx-r {
+  display: flex;
+  flex-direction: row;
+}
+
+.fx-2 {
+  flex-grow: 2;
+}
+
+.gap-10 {
+  gap: 10px;
+}
+
+.d-none {
+  display: none;
+}
