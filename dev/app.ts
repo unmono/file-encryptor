@@ -1,8 +1,17 @@
+import * as encryptors from './encryptor.ts';
 import type { VisualElement } from "./element.ts";
 import type * as interfaces from './interfaces.ts';
 import {ApplicationError, UserError} from "./exceptions.ts";
 
 export class App extends EventTarget {
+  private encryptors = [
+    encryptors.RSAEncryptor,
+    encryptors.AesGcmEncryptor,
+  ]
+  private encryptor: interfaces.Encryptor;
+  private f?: File;
+  
+  private algoSelect: VisualElement<'select'>;
   private fileInput: VisualElement<'input'>;
   private keyInput: VisualElement<'input'>;
   private authInput: VisualElement<'input'>;
@@ -14,11 +23,8 @@ export class App extends EventTarget {
   
   private rootElement: VisualElement<'div'>;
   
-  private encryptor: interfaces.Encryptor;
-  private f?: File;
-  
   constructor(
-    encryptor: interfaces.Encryptor,
+    algoSelect: VisualElement<'select'>,
     fileInput: VisualElement<'input'>,
     keyInput: VisualElement<'input'>,
     authInput: VisualElement<'input'>,
@@ -30,8 +36,7 @@ export class App extends EventTarget {
   ) {
     super();
     
-    this.encryptor = encryptor;
-    
+    this.algoSelect = algoSelect;
     this.fileInput = fileInput;
     this.keyInput = keyInput;
     this.authInput = authInput;
@@ -46,6 +51,10 @@ export class App extends EventTarget {
     
     this.encryptButton.element.disabled = true;
     this.decryptButton.element.disabled = true;
+    this.authInput.element.disabled = true;
+    
+    this.encryptor = new this.encryptors[0];
+    this.populateAlgorithms();
     
     this.encryptor.addEventListener('change', this.updateButtonsStates.bind(this));
     this.generateKeyButton.element.addEventListener('click', this.generateKey.bind(this));
@@ -54,6 +63,24 @@ export class App extends EventTarget {
     this.fileInput.element.addEventListener('change', this.sourceFile.bind(this));
     this.encryptButton.element.addEventListener('click', this.encryptFile.bind(this));
     this.decryptButton.element.addEventListener('click', this.decryptFile.bind(this));
+    this.algoSelect.element.addEventListener('change', this.selectAlgorithm.bind(this));
+  }
+  
+  private populateAlgorithms() {
+    for (let i = 0; i < this.encryptors.length; i++) {
+      const algoOption = document.createElement('option');
+      algoOption.value = String(i);
+      algoOption.innerText = this.encryptors[i].algorithm;
+      this.algoSelect.element.appendChild(algoOption);
+    }
+  }
+  
+  private selectAlgorithm() {
+    this.clear();
+    const algoIndex = Number(this.algoSelect.element.value);
+    const encryptorClass = this.encryptors[algoIndex];
+    this.authInput.element.disabled = encryptorClass.algorithm !== 'AES-GCM';
+    this.encryptor = new encryptorClass;
   }
   
   private async encryptFile() {
@@ -66,7 +93,7 @@ export class App extends EventTarget {
       authData = encoder.encode(this.authInput.element.value).buffer as ArrayBuffer;
     }
     const encryptedBuff = await this.encryptor.encrypt(fileBuff, authData);
-    const encryptedFile = new File([encryptedBuff], this.f.name);
+    const encryptedFile = new File([encryptedBuff], `${this.f.name}.encrypted`);
     this.downloadFile(encryptedFile);
   }
   
@@ -80,16 +107,24 @@ export class App extends EventTarget {
       authData = encoder.encode(this.authInput.element.value).buffer as ArrayBuffer;
     }
     const encryptedBuff = await this.encryptor.decrypt(fileBuff, authData);
-    const encryptedFile = new File([encryptedBuff], this.f.name);
+    const fileName = this.dropEncryptedFromName(this.f.name);
+    const encryptedFile = new File([encryptedBuff], fileName);
     this.downloadFile(encryptedFile);
+  }
+  
+  private dropEncryptedFromName(name: string): string {
+    const pidx = name.lastIndexOf('.');
+    const lastExt = name.substring(pidx + 1);
+    if (lastExt === 'encrypted') return name.substring(0, pidx);
+    return name;
   }
   
   private async generateKey() {
     const keys = await this.encryptor.generateJWK();
-    keys.forEach( key => {
-      const keyStr = JSON.stringify(key);
+    keys.forEach( namedKey => {
+      const keyStr = JSON.stringify(namedKey.key);
       if (!keyStr) throw new ApplicationError('Error exporting the key');
-      const f = new File([keyStr], `${Date.now()}.json`);
+      const f = new File([keyStr], `${Date.now()}.${namedKey.name}.json`);
       this.downloadFile(f);
     });
   }
@@ -104,6 +139,7 @@ export class App extends EventTarget {
   private clear() {
     this.keyInput.element.value = '';
     this.fileInput.element.value = '';
+    this.authInput.element.value = '';
     const changeEvent = new Event('change');
     this.keyInput.element.dispatchEvent(changeEvent);
     this.fileInput.element.dispatchEvent(changeEvent);
@@ -126,10 +162,14 @@ export class App extends EventTarget {
           throw new ApplicationError('Error reading a key file while parsing json file');
         }
         await this.encryptor.readJWK(jwk);
+        // TODO: app change event. Update buttons,
+        this.updateButtonsStates();
       });
       reader.addEventListener('error', () => {
         this.keyInput.element.value = '';
         this.keyInput.element.dispatchEvent(new Event('change'));
+        // TODO: app change event. Update buttons,
+        this.updateButtonsStates();
         throw new ApplicationError('Error reading a key file');
       });
       reader.readAsText(files[0]);

@@ -33,13 +33,15 @@ const keyInput = new VisualElement(
 const authInput = new VisualElement(
   'input',
   ['fx-2', ],
-  { id: 'vectorInput', },
+  { id: 'authInput', },
 );
 
+const algoSelect = new VisualElement('select');
 
 function main() {
   root.s(
     dropZone.s(
+      algoSelect.s(),
       structureElement('div', ['fx-r']).s(
         structureElement('label', ['w-30'], { for: 'fileInput' }).s('File to encrypt'),
         fileInput.s(),
@@ -60,7 +62,7 @@ function main() {
   );
 
   const app = new App(
-    new AesGcmEncryptor(),
+    algoSelect,
     fileInput,
     keyInput,
     authInput,
